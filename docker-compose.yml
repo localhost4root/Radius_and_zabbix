@@ -1,0 +1,107 @@
+version: '3.1'
+
+networks:
+  project_network:
+    driver: bridge
+
+services:
+  mysql:
+    container_name: mysql
+    image: mysql:5.7
+    networks:
+      - project_network
+    expose:
+      - '3306'
+    volumes:
+      - ./mysql:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+
+  zabbix-server:
+    container_name: zabbix-server
+    image: zabbix/zabbix-server-mysql:ubuntu-5.0.1
+    networks:
+      - project_network
+    links:
+      - mysql
+    restart: always
+    ports:
+      - '10051:10051'
+    volumes:
+      - ./zabbix_scripts:/usr/lib/zabbix
+      - ./zabbix_main:/var/lib/zabbix
+    environment:
+      - DB_SERVER_HOST=${DB_SERVER_HOST}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    depends_on:
+      - mysql
+
+  zabbix-frontend:
+    container_name: zabbix-frontend
+    image: zabbix/zabbix-web-apache-mysql:ubuntu-5.0.1
+    networks:
+      - project_network
+    links:
+      - mysql
+    restart: always
+    ports:
+      - '80:8080'
+      - '443:8443'
+    # volumes:
+    #   - ./zabbix_front/apache2:/etc/ssl/apache2
+    #   - ./zabbix_front/certs:/etc/zabbix/web/certs
+    environment:
+      - DB_SERVER_HOST=${DB_SERVER_HOST}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - PHP_TZ=${PHP_TZ}
+    depends_on:
+      - mysql
+  
+# freeradius part:
+  mysql_for_freeradius:
+    container_name: mysql_for_freeradius
+    image: mysql:5.7
+    networks:
+      - project_network
+    expose:
+      - '3306'
+    volumes:
+      - ./mysql_for_freeradius:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${FREERADIUS_MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${RADIUS_DB_NAME}
+      - MYSQL_USER=${RADIUS_MYSQL_USER}
+      - MYSQL_PASSWORD=${RADIUS_MYSQL_PASSWORD}
+  
+  freeradius:
+    container_name: freeradius
+    image: tpdock/freeradius
+    networks:
+      - project_network
+    links:
+      - mysql_for_freeradius
+    restart: always
+    ports:
+      - '1812:1812/udp'
+      - '1813:1813/udp'
+    # volumes:
+    #   - ./zabbix_front/apache2:/etc/ssl/apache2
+    #   - ./zabbix_front/certs:/etc/zabbix/web/certs
+    environment:
+      - RADIUS_DB_HOST=${RADIUS_DB_SERVER_HOST}
+      - RADIUS_DB_NAME=${RADIUS_DB_NAME}
+      - RADIUS_DB_USERNAME=${RADIUS_MYSQL_USER}
+      - RADIUS_DB_PASSWORD=${RADIUS_MYSQL_PASSWORD}
+    depends_on:
+      - mysql_for_freeradius
+
+
+# daloradius part
+
